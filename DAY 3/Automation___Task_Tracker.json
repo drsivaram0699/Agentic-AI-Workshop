@@ -1,0 +1,262 @@
+{
+  "name": "Automation & Task Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1VhCTetjebT351VRgn5SUJpUQ31Ili-1E8-CVDkpMkLs",
+          "mode": "list",
+          "cachedResultName": "Project Management: Daily Stand-Up Automation & Task Tracker  (Responses)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VhCTetjebT351VRgn5SUJpUQ31Ili-1E8-CVDkpMkLs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 840820677,
+          "mode": "list",
+          "cachedResultName": "Form Responses 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1VhCTetjebT351VRgn5SUJpUQ31Ili-1E8-CVDkpMkLs/edit#gid=840820677"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -40,
+        -60
+      ],
+      "id": "1a4143cd-ffb3-482b-9f1c-f36ec6f54aef",
+      "name": "Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "yplTyQ1ozsE0YUfg",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        -60
+      ],
+      "id": "42b4da0e-8f33-4ada-98c1-6c15ea675689",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Identify urgent tasks {{ $json.Priority }}(Urgency = High).\n\nList any tasks{{ $json['Task ID,'] }} with blockers{{ $json['Block '] }}, including the reason for each.{{ $json.Notes }} . Finally the priority {{ $json.Priority }}\n\nGenerate a concise daily task summary grouped by assignee{{ $json['Assignee,'] }}.\n\nInclude the overarching email task that must be sent to {{ $json['Email ID'] }} by 5:30 PM daily.\n\nFormat the output for a summary email with the subject: \"Daily Status Update - [Today’s Date]\".",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        180,
+        -60
+      ],
+      "id": "4eefe1ae-2128-4094-9a34-3d949fadcc5a",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        100,
+        160
+      ],
+      "id": "eb2cad63-42fa-4a11-8127-5dd448b6b97e",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "r2VjtylqsJB6i3Xs",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "Testing",
+        "contextWindowLength": 50
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        280,
+        160
+      ],
+      "id": "04b654c7-03b2-4074-a70e-ed195b35ddde",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Google Sheets').item.json['Email ID'] }}",
+        "subject": "Automation & Task Tracker",
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        620,
+        -60
+      ],
+      "id": "15c237bb-9be0-4241-a523-31decd9a0fb1",
+      "name": "Gmail",
+      "webhookId": "c9fc554c-74ae-43e3-b2cd-e1e6ac97997b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "8qbxXzbuv9USiU8n",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 17,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -220,
+        120
+      ],
+      "id": "f77b7f20-2ba5-4382-8564-7dc6af06df98",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date().toISOString().split('T')[0];\nlet urgent = [];\nlet blockers = [];\nlet plans = [];\n\nfor (const item of items) {\n  const task = item.json;\n  if (task.Priority === 'High') {\n    urgent.push(`* ${task.Description} (Task ${task[\"Task ID\"]}, Priority: ${task.Priority}) - ${task.Notes || 'No notes'}`);\n  }\n  if (task.Blocker && task.Blocker.toLowerCase() !== 'none') {\n    blockers.push(`* ${task.Description} (Task ${task[\"Task ID\"]}) - ${task.Blocker}`);\n  }\n  plans.push(`* ${task.Assignee}: ${task.Description}`);\n}\n\nreturn [{\n  json: {\n    summary: `Subject: Daily Summary - ${today}\\n\\nTeam,\\n\\n` +\n             `**Urgent Tasks:**\\n${urgent.join('\\n') || 'None'}\\n\\n` +\n             `**Blockers:**\\n${blockers.join('\\n') || 'None'}\\n\\n` +\n             `**Individual Task Plans:**\\n${plans.join('\\n')}`\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        -300
+      ],
+      "id": "b2a21798-ed4b-4ad0-b48e-de82a469ebfd",
+      "name": "Code"
+    }
+  ],
+  "pinData": {
+    "Schedule Trigger": [
+      {
+        "json": {
+          "name": "First item",
+          "code": 1
+        }
+      },
+      {
+        "json": {
+          "name": "Second item",
+          "code": 2
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c0820005-9bb7-49a6-b135-a9b300c2b4ee",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "384a12538794e5b1e91f839d78ff00f49a2b86f8b60e37d9a19d9c838e02e03f"
+  },
+  "id": "21PdF4xCgLmD180Z",
+  "tags": []
+}
